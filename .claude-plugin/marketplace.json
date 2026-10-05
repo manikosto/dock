@@ -1,0 +1,20 @@
+{
+  "name": "dock",
+  "owner": {
+    "name": "manikosto",
+    "url": "https://github.com/manikosto"
+  },
+  "description": "A row of clickable buttons under the Claude Code prompt: toggle mods like deck, files and preview, or run any command you pin there",
+  "plugins": [
+    {
+      "name": "dock",
+      "description": "A row of clickable buttons under the Claude Code prompt: toggle mods like deck, files and preview, or run any command you pin there",
+      "source": "./",
+      "category": "productivity",
+      "tags": [
+        "mod",
+        "toolbar"
+      ]
+    }
+  ]
+}
