@@ -12,7 +12,7 @@ const PALETTE = ['#ff8a5c', '#5cc8ff', '#c792ea', '#7ee787', '#ffd166', '#ff6ea8
 const DEFAULTS: DockItem[] = [
   { command: 'deck', icon: '◧', color: '#ff8a5c' },
   { command: 'files', icon: '▤', color: '#5cc8ff' },
-  { command: 'preview', icon: '◉', color: '#c792ea' },
+  { command: 'aside', icon: '◇', color: '#4fd6be' },
 ]
 
 const nextColor = (list: DockItem[]) => PALETTE.find(c => !list.some(i => i.color === c)) ?? PALETTE[list.length % PALETTE.length]!
@@ -20,7 +20,7 @@ const colorOf = (item: DockItem, i: number) => item.color ?? PALETTE[i % PALETTE
 
 // Icons for commands people often pin; anything else gets a dot.
 const ICONS: Record<string, string> = {
-  deck: '◧', files: '▤', preview: '◉', glint: '✦', compact: '⇲', clear: '⌫', context: '◔', cost: '$',
+  deck: '◧', files: '▤', aside: '◇', glint: '✦', compact: '⇲', clear: '⌫', context: '◔', cost: '$',
   model: '◆', config: '⚙', plugin: '⧉', mcp: '⌁', review: '✓', agents: '◈', memory: '✎', help: '?',
   'reload-plugins': '↻', status: 'ℹ', export: '⇪', resume: '↺', init: '✱', hooks: '⚓', permissions: '⚿',
 }
@@ -53,12 +53,21 @@ async function syncPanes($: Engine) {
   if (ids.join(',') !== was.join(',')) await update($, shown, () => ids)
 }
 
-// A press: close the item's pane if it is open, otherwise run its command (which opens or toggles it).
+// A press: close the item's pane if it is open; otherwise first close the other mods' panes, then run its
+// command. The dock beside the transcript takes its width when it opens, so one pane at a time lets each
+// mod open at its own width (files wide, deck narrow) instead of inheriting whatever was open.
 async function press($: Engine, item: DockItem) {
-  const open = (await $.ui.panes().catch(() => [])).find(p => p.id === item.command && p.isShown)
+  const panes = await $.ui.panes().catch(() => [])
+  const open = panes.find(p => p.id === item.command && p.isShown)
   try {
     if (open) await $.ui.close({ id: item.command })
-    else await $.command.run({ command: item.command, args: '' })
+    else {
+      const pinned = new Set((await read($, items)).map(i => i.command))
+      const others = panes.filter(p => p.isShown && p.id !== item.command && pinned.has(p.id))
+      for (const p of others) await $.command.run({ command: p.id, args: '' }).catch(() => undefined)
+      if (others.length) await $.clock.sleep(150)
+      await $.command.run({ command: item.command, args: '' })
+    }
   } catch (err) {
     $.ui.toast(`/${item.command}: ${err instanceof Error ? err.message : String(err)}`)
   }
@@ -84,6 +93,24 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // One pane at a time, however a pinned mod is opened (a dock button or a typed command): the dock
+  // beside the transcript takes its width when it opens, so the others close first and it reopens at
+  // the width the new pane asks for.
+  on('command.run', async ($, e, next) => {
+    if (e.command === 'dock' || e.args.trim()) return next(e)
+    try {
+      const pinned = new Set((await read($, items)).map(i => i.command))
+      if (pinned.has(e.command)) {
+        const panes = await $.ui.panes()
+        const isOpening = !panes.some(p => p.id === e.command && p.isShown)
+        const others = isOpening ? panes.filter(p => p.isShown && p.id !== e.command && pinned.has(p.id)) : []
+        for (const p of others) await $.ui.close({ id: p.id }).catch(() => $.command.run({ command: p.id, args: '' }))
+        if (others.length) await $.clock.sleep(150)
+      }
+    } catch {}
+    return next(e)
+  })
+
   on('command.run', { command: 'dock' }, async ($, e) => {
     const [verb, name] = e.args.trim().split(/\s+/)
     const cmd = name?.replace(/^\//, '')
@@ -98,7 +125,7 @@ export const register: Register = on => {
     }
     if (verb === 'reset') {
       await save($, DEFAULTS)
-      return { text: 'The dock is back to deck, files and preview.' }
+      return { text: 'The dock is back to deck, files and aside.' }
     }
     const r = await openSettings($)
     return { text: r.isPlaced ? 'Pick the buttons: click to add or remove, Esc to close.' : `dock settings wait: ${r.reason ?? 'no room'}` }

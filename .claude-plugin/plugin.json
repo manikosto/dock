@@ -1,6 +1,6 @@
 {
   "name": "dock",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A row of clickable buttons under the Claude Code prompt: toggle mods like deck, files and preview, or run any command you pin there",
   "types": "./types/index.d.ts"
 }
